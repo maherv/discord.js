@@ -1,0 +1,652 @@
+-- Module [football] by Makinit
+
+--tfm.exec.setRoomMaxPlayers(14)
+tfm.exec.disableAutoShaman(true)
+
+local MAP = "@3791114";
+local MAX_SCORE = 20;
+local WELCOME_MESSAGE = "<J>Welcome! This is a football game for testing modules. Write <N>!help<J> for more information. Please report any issues to Makinit.";
+local keys = {space = 32, left = 37, right = 39, a = 65, d = 68, q = 81, x = 88};
+local team1 = {id = 1, score = 1, colour = "0x0000FF", colour2 = "0x8888FF", tag = "<BV>", name = "the blue team", players = {}};
+local team2 = {id = 2, score = 1, colour = "0xFF0000", colour2 = "0xFF8888", tag = "<R>", name = "the red team", players = {}};
+local ball = {player = nil, object = 0, t = 0, x = 0, y = 0, vx = 0, vy = 0, ax = 0, ay = 0, takeTime = 0, shootTime = 0};
+local tasks = {};
+
+local addShamanObject = function(...)
+	local object, x, y, r, vx, vy = ...
+	print(object .. "," .. x .. "," .. y .. "," .. r .. "," .. vx .. "," .. vy)
+	return tfm.exec.addShamanObject(...)
+end
+
+local players = {};
+local spectators = {};
+
+function table.copy(t)
+  local t2 = {}
+  for k,v in pairs(t) do
+    t2[k] = v
+  end
+  return t2
+end
+
+function printInfo(name, value, tabs)
+	tabs = tabs or "";
+	local t = type(value);
+	print(tabs .. t .. " " .. tostring(name) .. " = " .. tostring(value));
+	if t == "table" then
+		for n, v in pairs(value) do
+			if v == value then
+				print(tabs .. "\tself " .. n);
+			else
+				printInfo(n, v, tabs .. "\t");
+			end
+		end
+	end
+end
+
+-------------------------
+-- Fonction principale --
+-------------------------
+
+function main()
+	command.addHandler("debug", doDebug);
+	command.addHandler("cheese", doCheese);
+	command.addHandler("help", doHelp);
+	command.addHandler("arrow", doArrow);
+	--command.addHandler("t", doTeamChat);
+	
+	debug.disableEventLog(debugOff);
+	tfm.exec.disableAutoScore(true);
+	tfm.exec.disableAutoNewGame(true);
+	tfm.exec.setGameTime(0, true);
+	--tfm.exec.chatMessage(WELCOME_MESSAGE);
+	tfm.exec.newGame(MAP);
+end
+
+------------------------
+-- Fonction newGame ----
+------------------------
+
+function eventNewGame()
+	team1.players = {};
+	team2.players = {};
+	team1.score = 1;
+	team2.score = 1;
+	gameOver = false;
+	arrows = false;
+	clearTextArea = false;
+	for name, player in pairs(tfm.get.room.playerList) do
+		if player.isShaman then
+			tfm.exec.killPlayer(name);
+			tfm.exec.respawnPlayer(name);
+			shaman = name;
+		end
+		initPlayer(name);
+	end
+	
+	for name, player in pairs(tfm.get.room.playerList) do
+		if player.isShaman then
+			tfm.exec.killPlayer(name);
+			tfm.exec.respawnPlayer(name);
+			shaman = name;
+		end
+		returnPlayer(name);
+	end
+	ball.object = nil;
+	if #team1.players > 0 and math.random() > 0.5 then
+		tasks[os.time() + 5000] = function() giveBall(team1.players[math.random(#team1.players)]) end;
+	elseif #team2.players > 0 then
+		tasks[os.time() + 5000] = function() giveBall(team2.players[math.random(#team2.players)]) end;
+	end
+end
+
+------------------------------
+-- Fonction PlayerGetCheese --
+------------------------------
+function eventPlayerGetCheese(player)
+	ball.player = player;
+end
+
+------------------------
+-- Fonction eventLoop --
+------------------------
+
+function doArrow(player)
+	if arrows then
+	arrows = false
+	else
+	arrows = true
+	end
+end
+
+function eventLoop()
+	--[[if clearTextArea then
+	ui.removeTextArea(0, player)
+	clearTextArea = false
+	end]]
+	--local done = {}
+	local now = os.time();
+	
+	-- task handler
+	for when, task in pairs(table.copy(tasks)) do
+		if when <= now then
+			tasks[when] = nil;
+			task();
+		end
+	end
+	if not gameOver then
+		tfm.exec.setGameTime(60 * team1.score + team2.score + 1, true);
+	if arrows then
+		local object = ball.object;
+		local player = ball.player;
+		if object then
+			local x, y = getBallLocation();
+			addShamanObject(0, x, y - 25, 0, 0, 0, true);
+		elseif player then
+			local ballPlayer = players[player];
+			if false or ballPlayer then
+				addShamanObject(0, ballPlayer.x, ballPlayer.y - 50, 0, 0, 0, true);
+			end
+			local tfmPlayer = tfm.get.room.playerList[player];
+			if tfmPlayer then
+				addShamanObject(0, tfmPlayer.x, tfmPlayer.y - 50, 0, 0, 0, true);
+				end
+				end
+				end
+	-- Flèches
+		
+		--[[local object = ball.object;
+		local player = ball.player;
+		if object then
+			local x, y = getBallLocation();
+			addShamanObject(0, x, y - 25, 0, 0, 0, true);
+		elseif player then
+			local ballPlayer = players[player];
+			if false or ballPlayer then
+				addShamanObject(0, ballPlayer.x, ballPlayer.y - 50, 0, 0, 0, true);
+			end
+			local tfmPlayer = tfm.get.room.playerList[player];
+			if tfmPlayer then
+				addShamanObject(0, tfmPlayer.x, tfmPlayer.y - 50, 0, 0, 0, true);
+			end
+		end]]
+	else
+		local left = 50;
+		local right = 1550;
+		if team1.score > team2.score then
+			right = 800;
+		elseif team2.score > team1.score then
+			left = 800;
+		end
+		addShamanObject(28, math.random(left, right), 350, 0, 0, 0, false);
+	end
+end
+
+-----------------------
+-- Fonction keyboard --
+-----------------------
+
+function eventKeyboard(player, key, down, x, y)
+	if down and players[player] then
+		if key == keys.left or key == keys.a or key == keys.q then
+			players[player].direction = -1;
+		elseif key == keys.right or key == keys.d then
+			players[player].direction = 1;
+		end
+	end
+	if key == keys.space then
+		local now = os.time();
+		local x2, y2 = getBallLocation(now);
+		if player == ball.player then
+			if down then
+				ball.space = now;
+			elseif ball.space then
+				local force = (now - ball.space) / 100;
+				if force > 8 then
+					force = 8;
+				end
+				ball.space = nil;
+				shootBall(x, y, 5, -6 - force);
+				players[player].shootTime = now;
+				ball.takeTime = 0;
+				ball.shooter = player;
+			end
+		elseif ball.object then
+			local shootTime = players[player].shootTime or 0;
+			if now > shootTime + 1000 and isClose(x, y - 25, getBallLocation(now)) then
+				removeBall();
+				ball.takeTime = now;
+				giveBall(player);
+				ball.space = nil;
+				ball.passer = ball.shooter;
+			end
+		elseif ball.player and players[ball.player] and players[ball.player].team.id ~= players[player].team.id and now > ball.takeTime + 1000 then
+			local ballPlayer = tfm.get.room.playerList[ball.player];
+			local tfmPlayer = tfm.get.room.playerList[player];
+			if isClose(x, y, ballPlayer.x, ballPlayer.y) or isClose(tfmPlayer.x, tfmPlayer.y, ballPlayer.x, ballPlayer.y) then
+				takeBall(ballPlayer.x, ballPlayer.y);
+				ball.takeTime = now;
+				giveBall(player);
+				ball.space = nil;
+				ball.passer = nil;
+			end
+		end
+	end
+	--players[player].x = x;
+	--players[player].y = y;
+end
+
+----------------------
+-- Fonction isClose --
+----------------------
+
+function isClose(x, y, x2, y2)
+	local d = 25;
+	return x < x2+d and x > x2-d and y < y2+d and y > y2-d;
+end
+
+-------------------------
+-- Fonction removeBall --
+-------------------------
+
+function removeBall()
+	tfm.exec.removeObject(ball.object);
+	ball.object = nil;
+	if ball.floorTimer then
+		system.removeTimer(ball.floorTimer);
+	end
+	ball.floorTimer = nil;
+	if ball.goalTimer then
+		tasks[ball.goalTimer] = nil;
+	end
+	ball.goalTimer = nil;
+end
+
+------------------------
+-- Fonction shootBall --
+------------------------
+
+function shootBall(x, y, vx, vy)
+	ball.x = x;
+	ball.y = y;
+	ball.vx = players[ball.player].direction * (vx or 5);
+	ball.vy = (vy or -6);
+	ball.ax = 0;
+	ball.ay = 5;
+	if ball.object then
+		tfm.exec.removeObject(ball.object);
+	end
+	ball.t = os.time();
+	--ball.object = addShamanObject(tfm.enum.shamanObject.littleBox, x, y, 0, ball.vx, ball.vy, true);
+	ball.object = addShamanObject(17, x, y, 0, 0, 0, true);
+	tfm.exec.moveObject(ball.object, x, y, false, ball.vx*10, ball.vy*10, false);
+	if not gameOver then
+		local yf = 330; --floor
+		setFloorTimer(yf);
+		if ball.vx < 0 then
+			setGoalTimer(0);
+		elseif ball.vx > 0 then
+			setGoalTimer(1600);
+		end
+	end
+	takeBall(x, y);
+end
+
+----------------------------
+-- Fonction setFloorTimer --
+----------------------------
+
+function setFloorTimer(yf)
+	if ball.floorTimer then
+		system.removeTimer(ball.floorTimer);
+	end
+	if yf then
+		local tf;
+		if (ball.ay == 0) then
+			tf = (yf - ball.y) / (30*ball.vy);
+		else
+			tf = (-(30*ball.vy) + math.sqrt((30*ball.vy)*(30*ball.vy) - 4*(30*ball.ay)*(ball.y-yf))) / (2*(30*ball.ay));
+			if tf < 0 then
+				--print"-");
+				tf = (-(30*ball.vy) - math.sqrt((30*ball.vy)*(30*ball.vy) - 4*(30*ball.ay)*(ball.y-yf)))/(2*(30*ball.ay));
+			end
+		end
+		if tf < 1 then
+			tf = 1;
+		end
+		--ball.floorTimer = system.newTimer(hitFloor, tf * 1000, false, tf);
+	end
+end
+
+-----------------------
+-- Fonction hitFloor --
+-----------------------
+
+function hitFloor(timer, tf)
+	local now = os.time();
+	local x, y = getBallLocation(now);
+	ball.x = x;
+	ball.y = 330;
+	ball.vy = 0;
+	ball.ax = 0;
+	ball.ay = 0;
+	ball.t = now;
+	tfm.exec.moveObject(ball.object, ball.x, ball.y, false, 0, ball.vy, false);
+	--print"hit!");
+	--printtf .. "," .. x .. "," .. y);
+end
+
+---------------------------
+-- Fonction setGoalTimer --
+---------------------------
+
+function setGoalTimer(xg)
+	if ball.goalTimer then
+		tasks[ball.goalTimer] = nil;
+	end
+	if xg then
+		local tg;
+		if (ball.ax == 0) then
+			tg = (xg - ball.x) / (30*ball.vx);
+		else
+			tg = (-(30*ball.vx) + math.sqrt((30*ball.vx)*(30*ball.vx) - 4*(30*ball.ax)*(ball.x-xg))) / (2*(30*ball.ax));
+			if tg < 0 then
+				--print"-");
+				tg = (-30*ball.vx - math.sqrt(900*ball.vx*ball.vx - 480*ball.ax*(ball.x-xg))) / (60*ball.ax);
+			end
+		end
+		local _, hit = getBallLocation(os.time() + tg * 1000);
+		local height = 275;
+		ball.scored = hit > height;
+		
+		if tg < 1 then
+			tg = 1;
+		end
+		ball.goalTimer = os.time() + tg * 1000;
+		tasks[ball.goalTimer] = hitGoal;
+	end
+end
+
+----------------------
+-- Fonction hitgoal --
+----------------------
+
+add = ui.addTextArea
+font = "<p align='center'><font size='11'><face='verdana'>"
+
+function hitGoal()
+	local winner;
+	local loser;
+	local loser;
+	if ball.vx > 0 then
+		winner = team1;
+		loser = team2;
+	elseif ball.vx < 0 then
+		winner = team2;
+		loser = team1;
+	end
+	if ball.scored then
+		winner.score = winner.score + 1;
+		if players[ball.shooter].team == winner then
+			tfm.exec.setPlayerScore(ball.shooter, 10, true);
+			local pass = "";
+			if ball.passer and players[ball.passer] and players[ball.passer].team == winner then
+				tfm.exec.setPlayerScore(ball.passer, 5, true);
+				pass = " after a pass from " .. winner.tag .. ball.passer .. "<BL>";
+			end
+			add(0, font .. winner.tag .. ball.shooter .. "<BL> scored" .. pass .. "!\n" .. team1.tag .. team1.name .. " <V>" .. team1.score .. "<BL> - <V>" .. team2.score .. team2.tag .. " " .. team2.name, nil, 700, 50, 200, height, 0x324752, 0x382020, 0.9, false);
+		else
+			tfm.exec.setPlayerScore(ball.shooter, -10, true);
+			add(0, font .. loser.tag .. ball.shooter .. "<BL> scored an own goal!\n" .. team1.tag .. team1.name .. " <V>" .. team1.score .. "<BL> - <V>" .. team2.score .. team2.tag .. " " .. team2.name, nil, 700, 50, 200, height, 0x324752, 0x382020, 0.9, false);
+		end
+		--add(1,team1.tag .. team1.name .. " <V>" .. team1.score .. "<BL> - <V>" .. team2.score .. team2.tag .. " " .. team2.name, nil, 700, 50, 200, height, 0x324752, 0x382020, 0.9, false);
+		if winner.score == MAX_SCORE then
+			add(0, font .. "<J>Well done, players of " .. winner.tag .. winner.name .. "<J>, you win!", nil, 700, 50, 200, height, 0x324752, 0x382020, 0.9, false);
+			gameOver = true;
+			tfm.exec.setGameTime(20, true);
+			system.newTimer(function() tfm.exec.newGame(MAP) end, 20000, false);
+		end
+	else
+		add(0, font .. players[ball.shooter].team.tag .. ball.shooter .. "<BL> missed!", nil, 700, 50, 200, height, 0x324752, 0x382020, 0.9, false);
+	end
+	removeBall();
+	ball.shooter = nil;
+	ball.passer = nil;
+	
+	for name, player in pairs(players) do
+		returnPlayer(name);
+	end
+	if #loser.players > 0 then
+		giveBall(loser.players[math.random(#loser.players)]);
+	else
+		giveBall(winner.players[math.random(#winner.players)]);
+	end
+end
+
+-----------------------
+-- Fonction takeBall --
+-----------------------
+
+function takeBall(x, y)
+	tfm.exec.killPlayer(ball.player);
+	tfm.exec.respawnPlayer(ball.player);
+	if x and y then
+		tfm.exec.movePlayer(ball.player, x, y);
+	end
+	ball.player = nil;
+end
+	
+function giveBall(player)
+	tfm.exec.giveCheese(player);
+	ball.player = player;
+end
+
+function getBallLocation(t)
+	t = t or os.time();
+	local dt = os.difftime(t, ball.t) / 1000;
+	local x = ball.x + dt*(ball.vx + ball.ax*dt) * 30;
+	--local y = ball.y + dt*(ball.vy + ball.ay*dt) * 30;
+	-- FIXED GROUND
+	local y = math.min(ball.y + dt*(ball.vy + ball.ay*dt) * 30, 330);
+	return x, y;
+end
+
+------------------------
+-- Fonction newPlayer --
+------------------------
+
+function eventNewPlayer(player)
+	--tfm.exec.chatMessage(WELCOME_MESSAGE, player);
+	initPlayer(player);
+	tfm.exec.respawnPlayer(player);
+	returnPlayer(player);
+end
+
+-------------------------
+-- Fonction initPlayer --
+-------------------------
+
+function initPlayer(player)
+	players[player] = {direction = 1, x = 0, y = 0};
+	for key, code in pairs(keys) do
+		tfm.exec.bindKeyboard(player, code, true, true);
+		tfm.exec.bindKeyboard(player, code, false, true);
+	end
+	local team;
+	if #team1.players < #team2.players then
+		team = team1;
+	elseif #team1.players > #team2.players then
+		team = team2;
+	elseif math.random() < 0.5 then
+		team = team1;
+	else
+		team = team2;
+	end
+	table.insert(team.players, player);
+	players[player].team = team;
+	
+	--tfm.exec.chatMessage("<N>Press the <VP>space bar<N> to take or shoot the ball.", player);
+	--tfm.exec.chatMessage("<J>You joined " .. team.tag .. team.name .. "<J>!", player);
+end
+
+---------------------------
+-- Fonction returnPlayer --
+---------------------------
+
+function returnPlayer(player)
+	if not players[player] then
+		initPlayer(player)
+	end
+	local team = players[player].team;
+	tfm.exec.setNameColor(player, team.colour);
+	if team == team1 then
+		tfm.exec.movePlayer(player, math.random(50, 800), 350);
+	elseif team == team2 then
+		tfm.exec.movePlayer(player, math.random(800, 1550), 350);
+	end
+end
+
+-------------------------
+-- Fonction playerLeft --
+-------------------------
+
+function eventPlayerLeft(player)
+	local team = players[player].team;
+	local index;
+	for i, name in ipairs(team.players) do
+		if name == player then
+			index = i;
+		end
+	end
+	table.remove(team.players, index);
+	if ball.player == player then
+		if #team.players == 0 and team == team1 then
+			team = team2;
+		elseif #team.players == 0 and team == team2 then
+			team = team1
+		end
+		giveBall(team.players[math.random(#team.players)]);
+	end
+	
+	for key, code in pairs(keys) do
+		tfm.exec.bindKeyboard(player, code, true, false);
+		tfm.exec.bindKeyboard(player, code, false, false);
+	end
+end
+
+----------------------
+-- Fonction doDebug --
+----------------------
+
+local debugOff = true;
+function doDebug(player)
+	if player == "Makinit" then
+		debugOff = not debugOff;
+		debug.disableEventLog(debugOff);
+	end
+end
+
+-----------------------
+-- Fonction doCheese --
+-----------------------
+
+function doCheese(player)
+	if player == "Masterrony" then
+		tfm.exec.giveCheese("Masterrony");
+	end
+end
+
+-- Test --
+
+---------------------
+-- Fonction doHelp --
+---------------------
+
+function doHelp(player)
+	local message = [[<J>You are a team player and you have to cooperate to score!
+Press the <VP>space bar<J> to take the ball, shoot the ball or tackle an opponent. When you hold it longer you will shoot harder.
+The first team to reach ]] .. MAX_SCORE .. [[ points will win!
+Commands:
+<N>!help<J> - displays this message
+<N>!t message<J> - team chat]];
+	ui.addPopup(0, 0, message, player, 250, yPos, 300, true);
+end
+
+--------------------------
+-- Fonctions doTeamChat --
+--------------------------
+
+--[[function doTeamChat(player, ...)
+	local arg = {...}
+	local team = players[player].team;
+	local text = string.gsub(string.gsub(table.concat(arg, " "), "<", "&lt;"), ">", "&gt;");
+	if team and text and text ~= "" then
+		local message = team.tag .. "[" .. player .. "]<N> " .. text;
+		for i, name in ipairs(team.players) do
+			tfm.exec.chat(message, name);
+		end-
+	end
+end]]
+
+-- command handling
+
+function eventChatCommand(player, message)
+	local args = split(message, "%s");
+	local text = table.remove(args, 1);
+	
+	command.handle(string.lower(text), player, args);
+end
+
+command = {handlers = {}};
+
+function command.addHandler(text, handler)
+	if command.handlers[text] == nil then
+		command.handlers[text] = {};
+		system.disableChatCommandDisplay(text, true);
+	end
+	table.insert(command.handlers[text], handler);
+end
+	
+function command.removeHandler(text, handler)
+	if command.handlers[text] ~= nil then
+		local index
+		for i, h in ipairs(command.handlers[text]) do
+			if handler == h then
+				index = i;
+			end
+		end
+		if index ~= nil then
+			table.remove(command.handlers[text], index)
+			if #command.handlers[text] == 0 then
+				command.handlers[text] = nil;
+				--system.disableChatCommandDisplay(text, false);
+			end
+		end
+	end
+end
+
+function command.handle(text, player, args)
+	if command.handlers[text] ~= nil then
+		for i, handler in ipairs(command.handlers[text]) do
+			handler(player, unpack(args));
+		end
+	end
+end
+
+function split(input, seperator)
+	local res = {};
+	for part in string.gmatch(input, "[^" .. seperator .. "]+") do
+		table.insert(res, part);
+	end
+	return res;
+end
+
+-- system unpack is unavailable
+function unpack(t, i)
+	i = i or 1;
+	if t[i] ~= nil then
+		return t[i], unpack(t, i + 1);
+	end
+end
+
+main();
